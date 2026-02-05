@@ -1,0 +1,84 @@
+name: Validação de Qualidade (CI)
+
+# 1. Dispara apenas em Pull Requests para a branch main
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validacao:
+    runs-on: ubuntu-latest
+    name: Validação do Site
+
+    steps:
+      # 2. Prepara o ambiente e baixa o código
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      # 3. Verificação CRÍTICA: Existe index.html?
+      # Se não existir, falha imediatamente antes de instalar qualquer coisa.
+      - name: Verificar existência do index.html
+        run: |
+          if [ ! -f "index.html" ]; then
+            echo "ERRO CRÍTICO: O arquivo 'index.html' não foi encontrado na raiz!"
+            echo "O GitHub Pages exige este arquivo. O deploy foi bloqueado."
+            exit 1
+          else
+            echo "Sucesso: index.html encontrado."
+          fi
+
+      # Configuração de Node.js para ferramentas de Lint
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      # Configuração de Ruby para o verificador de links (HTML Proofer)
+      - name: Configurar Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+
+      # Instalação das dependências de teste
+      - name: Instalar Ferramentas de Teste
+        run: |
+          npm install -g htmlhint
+          gem install html-proofer
+
+      # 4. Validação: Linter HTML
+      # Garante padrões técnicos (tags fechadas, doctype, etc)
+      - name: Executar Linter HTML (HTMLHint)
+        run: htmlhint "**/*.html"
+
+      # 5. Validação: Tamanho de Arquivo (> 500KB)
+      # O comando 'find' busca arquivos maiores que 500k ignorando a pasta .git
+      - name: Verificar arquivos maiores que 500KB
+        run: |
+          arquivos_grandes=$(find . -type f -size +500k -not -path "./.git/*")
+          if [ -n "$arquivos_grandes" ]; then
+            echo "ERRO: Arquivos excedendo 500KB detectados:"
+            echo "$arquivos_grandes"
+            exit 1
+          fi
+
+      # 6. Validação: Termos Proibidos (TODO, FIXME, Senhas)
+      # O grep busca recursivamente (-r), ignorando case (-i) e .git
+      # Se encontrar, retorna erro.
+      - name: Buscar termos proibidos ou sensíveis
+        run: |
+          # A ! inverte a lógica: se o grep achar algo, o comando falha
+          if grep -rEi "TODO|FIXME|senha|password" . --exclude-dir=.git --exclude-dir=.github; then
+            echo "ERRO: Termos proibidos (TODO, FIXME, senha, password) encontrados no código."
+            exit 1
+          fi
+
+      # 7. Validação: Links e Imagens Quebrados
+      # O htmlproofer verifica href, src, alt tags e valida se os arquivos existem
+      - name: Verificar Links e Imagens Quebrados
+        run: |
+          htmlproofer ./ \
+            --disable-external \
+            --check-html \
+            --check-img-http \
+            --allow-hash-href
