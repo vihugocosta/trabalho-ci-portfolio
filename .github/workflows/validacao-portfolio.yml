@@ -79,5 +79,4 @@ jobs:
         run: |
           htmlproofer ./ \
             --disable-external \
-            --check-html \
-            --allow-hash-href
+            --check-html 
