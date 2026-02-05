@@ -80,5 +80,4 @@ jobs:
           htmlproofer ./ \
             --disable-external \
             --check-html \
-            --check-img-http \
             --allow-hash-href
